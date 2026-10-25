@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import ValidationError
 
@@ -30,10 +30,12 @@ def validate_result(raw: Any) -> dict[str, Any]:
 
 
 class GemmaProvider:
-    def __init__(self, api_key: str, model_id: str, timeout_seconds: float = 30):
+    def __init__(self, api_key: str, model_id: str, timeout_seconds: float = 30,
+                 request_observer: Callable[[Any], None] | None = None):
         if not api_key or not model_id:
             raise ValueError("Gemma API key and model ID are required")
         self.api_key, self.model_id, self.timeout_seconds = api_key, model_id, min(timeout_seconds, 30)
+        self.request_observer = request_observer
         self._slots = threading.BoundedSemaphore(2)
 
     def extract(self, image_bytes: bytes, mime_type: str, request_id: str) -> dict[str, Any]:
@@ -43,7 +45,12 @@ class GemmaProvider:
             from google import genai
             from google.genai import types
 
-            client = genai.Client(api_key=self.api_key, http_options=types.HttpOptions(timeout=int(self.timeout_seconds * 1000)))
+            client_args = {}
+            if self.request_observer is not None:
+                client_args["event_hooks"] = {"request": [self.request_observer]}
+            client = genai.Client(api_key=self.api_key, http_options=types.HttpOptions(
+                timeout=int(self.timeout_seconds * 1000), client_args=client_args,
+            ))
             response = client.models.generate_content(
                 model=self.model_id,
                 contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), EXTRACTION_PROMPT],
