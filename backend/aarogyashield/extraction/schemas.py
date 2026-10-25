@@ -54,3 +54,32 @@ class DraftResponse(BaseModel):
     warnings: list[str]
     suggested_category: Literal["restricted"]
     created_at: datetime
+
+
+class ConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    corrected_json: ProposedExtraction
+    resource_summary: str = Field(min_length=1, max_length=2000)
+    approved_category: Literal["dental", "safety_summary", "restricted"]
+    human_reviewed: bool
+    category_reviewed: bool
+
+    @field_validator("resource_summary")
+    @classmethod
+    def summary_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("summary must not be blank")
+        return value
+
+
+class ConfirmationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    draft_id: str
+    state: Literal["confirmed"]
+    resource_id: str
+    category: Literal["dental", "safety_summary", "restricted"]
+    confirmed_at: datetime
+    reviewer_id: str
+    audit_event_id: str

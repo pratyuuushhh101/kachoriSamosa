@@ -5,11 +5,12 @@ import time
 from collections import defaultdict, deque
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 
 from .images import ImageInputError
-from .schemas import DraftResponse
+from .confirmation import confirm_draft
+from .schemas import ConfirmRequest, ConfirmationResponse, DraftResponse
 from .service import ExtractionError, create_draft
 
 MAX_REQUEST_BYTES = 6 * 1024 * 1024
@@ -77,5 +78,26 @@ def create_router(ports: Any) -> APIRouter:
             return JSONResponse(status_code=exc.status, headers={"Cache-Control": "no-store"}, content={"code": exc.code, "message": exc.message})
         finally:
             await image.close()
+
+    @router.post("/api/extraction-drafts/{draft_id}/confirm", status_code=201, response_model=ConfirmationResponse)
+    async def confirm_draft_route(
+        draft_id: str,
+        body: ConfirmRequest = Body(...),
+        actor: dict[str, Any] = Depends(ports.current_actor),
+        _csrf: Any = Depends(ports.require_csrf),
+        response: Response = None,
+    ) -> Any:
+        if response is not None:
+            response.headers["Cache-Control"] = "no-store"
+        try:
+            result, retried = confirm_draft(
+                actor=actor, draft_id=draft_id, request=body,
+                uow_factory=ports.uow_factory, now=ports.now,
+            )
+            if retried and response is not None:
+                response.status_code = 200
+            return result
+        except ExtractionError as exc:
+            return JSONResponse(status_code=exc.status, headers={"Cache-Control": "no-store"}, content={"code": exc.code, "message": exc.message})
 
     return router

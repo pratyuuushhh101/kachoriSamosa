@@ -43,7 +43,7 @@ def test_provider_timeout_no_consent_change(harness):
 def test_image_instruction_cannot_publish(harness):
     uow, ports = harness
     row = create_draft(actor={"id": "a-demo-1", "role": "admin"}, patient_id="p-demo-1", encounter_id="E1", image_bytes=png_bytes(), mime_type="image/png", ports=ports)
-    assert row["state"] == "draft" and not hasattr(uow, "resources")
+    assert row["state"] == "draft" and not uow.resources
 
 
 def test_upload_route_requires_admin_and_marks_response_private(harness):
